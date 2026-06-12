@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import Chart from 'chart.js/auto'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import dailyStatsData from '../daily-stats.json'
 import dailyStatsUrl from '../daily-stats.json?url'
+import fullResultsData from '../full-results.json'
 import fullResultsUrl from '../full-results.json?url'
 import {
   classifyResults,
@@ -13,13 +15,16 @@ import {
   metric,
   type DailyStat,
   type MetricKey,
+  type MetricSeriesSpec,
   type Result,
   type Results,
 } from '../shared/model.ts'
 import type {
   Chart as ChartInstance,
+  LegendItem,
   Plugin,
   ScriptableContext,
+  TooltipItem,
 } from 'chart.js'
 
 interface CategoryGroup {
@@ -29,7 +34,26 @@ interface CategoryGroup {
   color: string
 }
 
-const repositoryUrl = 'https://github.com/sxzz/npm-top-provenance'
+interface MixRow {
+  label: string
+  value: number
+  color: string
+}
+
+interface MixRowGroup {
+  label: string
+  rows: MixRow[]
+  weight: number
+}
+
+interface ListUpdate {
+  date: string
+  delta: number
+  nextSize: number
+  previousSize: number
+}
+
+const repositoryUrl = 'https://github.com/sxzz/npm-top-publishing'
 const readmeUrl = `${repositoryUrl}#readme`
 const issuesUrl = `${repositoryUrl}/issues`
 const licenseUrl = `${repositoryUrl}/blob/main/LICENSE`
@@ -46,27 +70,23 @@ const shortDateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'UTC',
 })
 
-const data = ref<DailyStat[]>([])
-const resultMap = ref<Results>({})
-const loading = ref(true)
-const errorMessage = ref('')
-const visiblePackageCounts = ref<number[]>([])
+const data = dailyStatsData as DailyStat[]
+const resultMap = fullResultsData as unknown as Results
+const classified = classifyResults(resultMap)
 const comboCanvas = ref<HTMLCanvasElement>()
 const mixCanvas = ref<HTMLCanvasElement>()
 const independentCanvas = ref<HTMLCanvasElement>()
 const charts: ChartInstance[] = []
 
-const latest = computed(() => data.value.at(-1))
-const first = computed(() => data.value[0])
-const previous = computed(() => data.value.at(-2))
+const latest = computed(() => data.at(-1))
+const firstSnapshot = computed(() => data[0])
+const previous = computed(() => data.at(-2))
 const total = computed(() => latest.value?.total ?? 0)
-const classified = computed(() => classifyResults(resultMap.value))
 
 const statCards = computed(() => {
   const current = latest.value
-  const start = first.value
   const prev = previous.value
-  if (!current || !start || !prev) return []
+  if (!current || !prev) return []
 
   const provenance = metric(current, 'provenance')
   const oidc = metric(current, 'oidc')
@@ -78,7 +98,7 @@ const statCards = computed(() => {
     {
       label: 'Tracked Packages',
       value: formatNumber(total.value),
-      detail: `${formatDelta(total.value - start.total)} since ${formatDate(start.date)}`,
+      detail: `${formatDelta(total.value - prev.total)} since ${formatDate(prev.date)}`,
       accent: COLORS.staged,
     },
     {
@@ -90,13 +110,13 @@ const statCards = computed(() => {
     {
       label: 'Provenance Attestations',
       value: formatNumber(provenance),
-      detail: `${formatPpDelta(provenance, start, 'provenance')} since first snapshot`,
+      detail: `${formatPpDelta(provenance, prev, 'provenance')} since ${formatDate(prev.date)}`,
       accent: COLORS.provenance,
     },
     {
       label: 'OIDC Publishing',
       value: formatNumber(oidc),
-      detail: `${formatPpDelta(oidc, start, 'oidc')} since first snapshot`,
+      detail: `${formatPpDelta(oidc, prev, 'oidc')} since ${formatDate(prev.date)}`,
       accent: COLORS.oidc,
     },
     {
@@ -114,203 +134,191 @@ const statCards = computed(() => {
   ]
 })
 
-const mixRows = computed(() => {
+const mixRows = computed<MixRow[]>(() => {
   const current = latest.value
-  if (!current) return []
-  return COMBO_SERIES.map(({ key, label, color }) => ({
-    label,
-    value: metric(current, key),
-    color,
-  }))
+  return current ? metricRows(current, COMBO_SERIES) : []
 })
 
-const trendRows = computed(() => {
+const stagedMixRows = computed<MixRow[]>(() => {
   const current = latest.value
-  const start = first.value
-  const prev = previous.value
-  if (!current || !start || !prev) return []
-
-  const provenance = metric(current, 'provenance')
-  const oidc = metric(current, 'oidc')
-  const trusted = metric(current, 'oidcAndProvenance')
-
+  if (!current) return []
+  const staged = metric(current, 'staged')
   return [
     {
-      label: 'Provenance Growth',
-      value: formatDelta(provenance - metric(start, 'provenance')),
-      detail: `${formatNumber(metric(start, 'provenance'))} to ${formatNumber(provenance)}`,
+      label: 'Staged Publishing',
+      value: staged,
+      color: COLORS.staged,
     },
     {
-      label: 'OIDC Growth',
-      value: formatDelta(oidc - metric(start, 'oidc')),
-      detail: `${formatNumber(metric(start, 'oidc'))} to ${formatNumber(oidc)}`,
-    },
-    {
-      label: 'List Expansion',
-      value: formatDelta(current.listSize - start.listSize),
-      detail: `${formatNumber(start.listSize)} to ${formatNumber(current.listSize)} upstream entries`,
-    },
-    {
-      label: 'Daily Trusted Movement',
-      value: formatDelta(trusted - metric(prev, 'oidcAndProvenance')),
-      detail: `${formatDate(prev.date)} to ${formatDate(current.date)}`,
+      label: 'Non-staged',
+      value: Math.max(total.value - staged, 0),
+      color: COLORS.nonStaged,
     },
   ]
 })
 
-const categoryGroups = computed<CategoryGroup[]>(() => [
+const mixRowGroups = computed<MixRowGroup[]>(() => [
+  {
+    label: 'Staged publishing',
+    rows: stagedMixRows.value,
+    weight: 1,
+  },
+  {
+    label: 'Publishing mode',
+    rows: mixRows.value,
+    weight: 3,
+  },
+])
+
+const trendRows = computed(() => {
+  const current = latest.value
+  const prev = previous.value
+  if (!current || !prev) return []
+
+  const provenance = metric(current, 'provenance')
+  const oidc = metric(current, 'oidc')
+  const trusted = metric(current, 'oidcAndProvenance')
+  const lastListUpdate = findLastListUpdate(data)
+  const currentRange = formatDateRange(prev.date, current.date)
+
+  return [
+    {
+      label: 'Provenance Movement',
+      value: formatDelta(provenance - metric(prev, 'provenance')),
+      detail: currentRange,
+    },
+    {
+      label: 'OIDC Movement',
+      value: formatDelta(oidc - metric(prev, 'oidc')),
+      detail: currentRange,
+    },
+    {
+      label: 'Last List Update',
+      value: lastListUpdate ? formatDate(lastListUpdate.date) : 'None',
+      detail: lastListUpdate
+        ? `${formatDelta(lastListUpdate.delta)} entries, ${formatNumber(lastListUpdate.previousSize)} to ${formatNumber(lastListUpdate.nextSize)}`
+        : 'No upstream list changes in history',
+    },
+    {
+      label: 'Trusted Movement',
+      value: formatDelta(trusted - metric(prev, 'oidcAndProvenance')),
+      detail: currentRange,
+    },
+  ]
+})
+
+const categoryGroups: CategoryGroup[] = [
   {
     title: 'Full Chain',
     description:
       'Packages using OIDC, provenance attestations, and staged publishing.',
-    names: classified.value.oidcProvenanceStaged,
+    names: classified.oidcProvenanceStaged,
     color: COLORS.oidcProvenanceStaged,
   },
   {
     title: 'OIDC + Provenance',
     description:
       'Packages using trusted publishing with provenance attestations.',
-    names: classified.value.oidcAndProvenance,
+    names: classified.oidcAndProvenance,
     color: COLORS.oidcAndProvenance,
   },
   {
     title: 'OIDC Without Provenance',
     description:
       'Packages using trusted publishing while provenance is disabled.',
-    names: classified.value.oidcWithoutProvenance,
+    names: classified.oidcWithoutProvenance,
     color: COLORS.oidcWithoutProvenance,
   },
   {
     title: 'Provenance Only',
     description:
       'Packages with provenance attestations but no detected OIDC publishing.',
-    names: classified.value.provenanceOnly,
+    names: classified.provenanceOnly,
     color: COLORS.provenanceOnly,
   },
-])
+]
+const visiblePackageCounts = ref(
+  categoryGroups.map((group) =>
+    Math.min(initialPackageCount, group.names.length),
+  ),
+)
+
+function metricRows(stat: DailyStat, series: MetricSeriesSpec[]): MixRow[] {
+  return series.map(({ key, label, color }) => ({
+    label,
+    value: metric(stat, key),
+    color,
+  }))
+}
 
 onMounted(async () => {
-  try {
-    const [dailyStats, fullResults] = await Promise.all([
-      loadJson<DailyStat[]>(dailyStatsUrl),
-      loadJson<Results>(fullResultsUrl),
-    ])
-    if (!dailyStats.at(-1) || !dailyStats[0] || !dailyStats.at(-2)) {
-      throw new Error('daily-stats.json must include at least two snapshots')
-    }
-    data.value = dailyStats
-    resultMap.value = fullResults
-    visiblePackageCounts.value = categoryGroups.value.map((group) =>
-      Math.min(initialPackageCount, group.names.length),
-    )
-    loading.value = false
-    await nextTick()
-    renderCharts()
-  } catch (error) {
-    console.error(error)
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-    loading.value = false
+  if (!latest.value || !firstSnapshot.value || !previous.value) {
+    throw new Error('daily-stats.json must include at least two snapshots')
   }
+  await nextTick()
+  renderCharts()
 })
 
 onBeforeUnmount(() => {
   destroyCharts()
 })
 
-async function loadJson<T>(url: string): Promise<T> {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`Failed to load ${url}`)
-  return (await response.json()) as T
-}
-
 function renderCharts(): void {
-  const currentComboCanvas = comboCanvas.value
-  const currentMixCanvas = mixCanvas.value
-  const currentIndependentCanvas = independentCanvas.value
-  if (!currentComboCanvas || !currentMixCanvas || !currentIndependentCanvas) {
+  if (!comboCanvas.value || !mixCanvas.value || !independentCanvas.value) {
     return
   }
 
   destroyCharts()
-  const listUpdateIndices = getListUpdateIndices(data.value)
+  const listUpdateIndices = getListUpdateIndices(data)
   Chart.defaults.font.family =
     'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
   Chart.defaults.color = '#5f6d66'
 
   charts.push(
-    new Chart(currentComboCanvas, {
-      type: 'line',
-      data: {
-        labels: data.value.map((item) => formatShortDate(item.date)),
-        datasets: COMBO_SERIES.map(({ key, label, color }) =>
-          lineDataset(
-            {
-              label,
-              data: getMetricSeries(data.value, key),
-              borderColor: color,
-              backgroundColor: color,
-            },
-            listUpdateIndices,
-          ),
-        ),
-      },
-      plugins: [createListUpdateMarkerPlugin(listUpdateIndices)],
-      options: lineChartOptions(),
-    }),
-    new Chart(currentMixCanvas, {
-      type: 'doughnut',
-      data: {
-        labels: mixRows.value.map((row) => row.label),
-        datasets: [
-          {
-            data: mixRows.value.map((row) => row.value),
-            backgroundColor: mixRows.value.map((row) => row.color),
-            borderColor: '#fff',
-            borderWidth: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '58%',
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: {
-              boxWidth: 12,
-              padding: 14,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: (context) =>
-                `${context.label}: ${formatNumber(Number(context.raw))} (${formatPercent(Number(context.raw))})`,
-            },
-          },
-        },
-      },
-    }),
-    new Chart(currentIndependentCanvas, {
-      type: 'line',
-      data: {
-        labels: data.value.map((item) => formatShortDate(item.date)),
-        datasets: INDEPENDENT_SERIES.map(({ key, label, color }) =>
-          lineDataset(
-            {
-              label,
-              data: getMetricSeries(data.value, key),
-              borderColor: color,
-              backgroundColor: color,
-            },
-            listUpdateIndices,
-          ),
-        ),
-      },
-      plugins: [createListUpdateMarkerPlugin(listUpdateIndices)],
-      options: lineChartOptions(),
-    }),
+    createLineChart(comboCanvas.value, COMBO_SERIES, listUpdateIndices),
+    createMixChart(mixCanvas.value),
+    createLineChart(
+      independentCanvas.value,
+      INDEPENDENT_SERIES,
+      listUpdateIndices,
+    ),
   )
+}
+
+function createLineChart(
+  canvas: HTMLCanvasElement,
+  series: MetricSeriesSpec[],
+  listUpdateIndices: Set<number>,
+): ChartInstance {
+  return new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map((item) => formatShortDate(item.date)),
+      datasets: series.map((item) =>
+        createLineDataset(item, listUpdateIndices),
+      ),
+    },
+    plugins: [createListUpdateMarkerPlugin(listUpdateIndices)],
+    options: lineChartOptions(),
+  })
+}
+
+function createMixChart(canvas: HTMLCanvasElement): ChartInstance {
+  return new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: mixRows.value.map((row) => row.label),
+      datasets: mixRowGroups.value.map((group) => ({
+        label: group.label,
+        data: group.rows.map((row) => row.value),
+        backgroundColor: group.rows.map((row) => row.color),
+        borderColor: '#fff',
+        borderWidth: 4,
+        weight: group.weight,
+      })),
+    },
+    options: mixChartOptions(),
+  })
 }
 
 function destroyCharts(): void {
@@ -319,17 +327,15 @@ function destroyCharts(): void {
   }
 }
 
-function lineDataset(
-  dataset: {
-    label: string
-    data: number[]
-    borderColor: string
-    backgroundColor: string
-  },
+function createLineDataset(
+  { key, label, color }: MetricSeriesSpec,
   listUpdateIndices: Set<number>,
 ) {
   return {
-    ...dataset,
+    label,
+    data: getMetricSeries(data, key),
+    borderColor: color,
+    backgroundColor: color,
     borderWidth: 2,
     pointRadius: (context: ScriptableContext<'line'>) =>
       listUpdateIndices.has(context.dataIndex) ? 5 : 0,
@@ -384,6 +390,7 @@ function lineChartOptions() {
       },
       tooltip: {
         callbacks: {
+          labelColor: lineTooltipLabelColor,
           label: (context: { dataset: { label?: string }; raw: unknown }) =>
             `${context.dataset.label}: ${formatNumber(Number(context.raw))}`,
         },
@@ -413,8 +420,100 @@ function lineChartOptions() {
   }
 }
 
+function mixChartOptions() {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '58%',
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          boxWidth: 12,
+          padding: 14,
+          generateLabels: mixLegendLabels,
+        },
+        onClick: toggleMixLegendItem,
+      },
+      tooltip: {
+        callbacks: {
+          labelColor: mixTooltipLabelColor,
+          label: mixTooltipLabel,
+        },
+      },
+    },
+  }
+}
+
+function lineTooltipLabelColor(context: {
+  dataset: { borderColor?: unknown; backgroundColor?: unknown }
+}) {
+  const color = context.dataset.borderColor ?? context.dataset.backgroundColor
+  const fallbackColor = COLORS.marker
+  const datasetColor = typeof color === 'string' ? color : fallbackColor
+
+  return {
+    backgroundColor: datasetColor,
+    borderColor: datasetColor,
+  }
+}
+
+function mixRowsForDataset(datasetIndex: number): MixRow[] {
+  return datasetIndex === 0 ? stagedMixRows.value : mixRows.value
+}
+
+function mixLegendLabels(chart: ChartInstance<'doughnut'>): LegendItem[] {
+  return [stagedMixRows.value, mixRows.value].flatMap((rows, datasetIndex) =>
+    rows.map((row, index) => {
+      const hidden =
+        chart.getDatasetMeta(datasetIndex).data[index]?.hidden === true
+      return {
+        text: row.label,
+        fillStyle: row.color,
+        strokeStyle: '#fff',
+        lineWidth: 2,
+        hidden,
+        index,
+        datasetIndex,
+      }
+    }),
+  )
+}
+
+function toggleMixLegendItem(
+  _event: unknown,
+  item: LegendItem,
+  legend: { chart: ChartInstance<'doughnut'> },
+): void {
+  const datasetIndex = item.datasetIndex
+  const index = item.index
+  if (datasetIndex == null || index == null) return
+  const arc = legend.chart.getDatasetMeta(datasetIndex).data[index]
+  if (!arc) return
+  arc.hidden = !arc.hidden
+  legend.chart.update()
+}
+
+function mixTooltipRow(context: TooltipItem<'doughnut'>): MixRow | undefined {
+  return mixRowsForDataset(context.datasetIndex)[context.dataIndex]
+}
+
+function mixTooltipLabelColor(context: TooltipItem<'doughnut'>) {
+  const color = mixTooltipRow(context)?.color ?? COLORS.marker
+  return {
+    backgroundColor: color,
+    borderColor: color,
+  }
+}
+
+function mixTooltipLabel(context: TooltipItem<'doughnut'>): string {
+  const row = mixTooltipRow(context)
+  if (!row) return ''
+  return `${row.label}: ${formatNumber(row.value)} (${formatPercent(row.value)})`
+}
+
 function showMorePackages(index: number): void {
-  const group = categoryGroups.value[index]
+  const group = categoryGroups[index]
   if (!group) return
   visiblePackageCounts.value[index] = group.names.length
 }
@@ -434,9 +533,25 @@ function moreButtonText(group: CategoryGroup, index: number): string {
 }
 
 function packageMeta(name: string): string {
-  const result = resultMap.value[name] ?? fallbackResult
+  const result = resultMap[name] ?? fallbackResult
   const [version, author] = result
   return `${version}${author ? ` · ${author}` : ''}`
+}
+
+function findLastListUpdate(stats: DailyStat[]): ListUpdate | undefined {
+  for (let index = stats.length - 1; index > 0; index--) {
+    const current = stats[index]
+    const previous = stats[index - 1]
+    if (!current || !previous || current.listSize === previous.listSize) {
+      continue
+    }
+    return {
+      date: current.date,
+      delta: current.listSize - previous.listSize,
+      nextSize: current.listSize,
+      previousSize: previous.listSize,
+    }
+  }
 }
 
 const fallbackResult: Exclude<Result, null> = [
@@ -451,12 +566,16 @@ function formatDate(value: string): string {
   return dateFormatter.format(new Date(`${value}T00:00:00.000Z`))
 }
 
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value)
+}
+
 function formatShortDate(value: string): string {
   return shortDateFormatter.format(new Date(`${value}T00:00:00.000Z`))
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US').format(value)
+function formatDateRange(start: string, end: string): string {
+  return `${formatDate(start)} to ${formatDate(end)}`
 }
 
 function formatCompact(value: number): string {
@@ -497,29 +616,11 @@ function formatPpDelta(
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <main id="main-content" class="page-shell">
-    <section v-if="loading" class="load-error" aria-live="polite">
-      <h1>Loading Dashboard…</h1>
-      <p>Fetching the latest local JSON data assets.</p>
-    </section>
-
-    <section
-      v-else-if="errorMessage"
-      class="load-error"
-      role="alert"
-      aria-live="polite"
-    >
-      <h1>Data Failed to Load</h1>
-      <p>
-        {{ errorMessage }}. Refresh the page or verify that the built site
-        includes the JSON data assets.
-      </p>
-    </section>
-
-    <template v-else-if="latest && first && previous">
+    <template v-if="latest && firstSnapshot && previous">
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
           <p class="eyebrow">High-Impact npm Publishing Signals</p>
-          <h1 id="page-title">npm Provenance Dashboard</h1>
+          <h1 id="page-title">npm Top Publishing Dashboard</h1>
           <p class="hero-lede">
             Track trusted publishing,
             <span translate="no">Provenance</span> attestations, and staged
@@ -568,7 +669,7 @@ function formatPpDelta(
           <div class="panel-head">
             <h2>Adoption Over Time</h2>
             <span
-              >{{ formatDate(first.date) }} -
+              >{{ formatDate(firstSnapshot.date) }} -
               {{ formatDate(latest.date) }}</span
             >
           </div>
@@ -577,9 +678,11 @@ function formatPpDelta(
           </div>
           <p class="chart-note data-gap-note">
             <span class="chart-note-marker" aria-hidden="true" />
-            Dashed vertical lines and triangle markers indicate days when the
-            upstream <span translate="no">npm-high-impact</span> package list
-            changed. These changes can create discontinuities in the trend.
+            <span>
+              Dashed vertical lines and triangle markers indicate days when the
+              upstream <span translate="no">npm-high-impact</span> package list
+              changed. These changes can create discontinuities in the trend.
+            </span>
           </p>
         </article>
 
@@ -671,7 +774,7 @@ function formatPpDelta(
               </div>
               <span>{{ formatNumber(group.names.length) }}</span>
             </header>
-            <ul>
+            <ul :aria-label="`${group.title} packages`">
               <li v-for="name in visiblePackages(group, index)" :key="name">
                 <a
                   :href="`https://npmx.dev/package/${encodeURIComponent(name)}`"
@@ -727,7 +830,7 @@ function formatPpDelta(
             </a>
             <a :href="fullResultsUrl">
               <strong>Download Full Results</strong>
-              <span>Raw package-level provenance data</span>
+              <span>Raw package-level publishing data</span>
             </a>
             <a :href="licenseUrl">
               <strong>MIT License</strong>

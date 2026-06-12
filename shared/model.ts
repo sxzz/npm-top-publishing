@@ -62,7 +62,7 @@ export const COMBO_SERIES = [
   },
   {
     key: 'none',
-    label: 'No Publishing Signal',
+    label: 'None',
     color: COLORS.none,
   },
 ] satisfies MetricSeriesSpec[]

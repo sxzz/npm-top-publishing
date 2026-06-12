@@ -92,7 +92,7 @@ ${staged.slice(0, 500).map(generatePackageItem).join('\n')}
 
 ### None
 
-Neither published via OIDC nor with a provenance attestation.
+Not using OIDC trusted publishing or provenance attestations.
 
 <details>
 

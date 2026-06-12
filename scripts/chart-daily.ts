@@ -107,14 +107,14 @@ function renderChart(
 
 const combo = renderChart(
   COMBO_SERIES,
-  'npm Top Packages — Provenance Adoption Over Time',
+  'npm Top Publishing — Adoption Over Time',
 )
 await writeChartSvg(combo.canvas, 'chart-daily-combo.svg')
 combo.chart.destroy()
 
 const independent = renderChart(
   INDEPENDENT_SERIES,
-  'npm Top Packages — Independent Publishing Metrics Over Time',
+  'npm Top Publishing — Independent Metrics Over Time',
 )
 await writeChartSvg(independent.canvas, 'chart-daily-independent.svg')
 independent.chart.destroy()
