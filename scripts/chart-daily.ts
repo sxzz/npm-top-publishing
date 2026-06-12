@@ -3,21 +3,21 @@ import Chart from 'chart.js/auto'
 import stats from '../daily-stats.json' with { type: 'json' }
 import {
   COLORS,
+  COMBO_SERIES,
+  getListUpdateIndices,
+  getNullableMetricSeries,
+  INDEPENDENT_SERIES,
   registerInterFont,
   writeChartSvg,
   type DailyStat,
+  type MetricSeriesSpec,
 } from './shared.ts'
 
 registerInterFont()
 
 const data = stats as DailyStat[]
 
-const updateIndices = new Set<number>()
-for (let i = 1; i < data.length; i++) {
-  if (data[i].listSize !== data[i - 1].listSize) {
-    updateIndices.add(i)
-  }
-}
+const updateIndices = getListUpdateIndices(data)
 
 const pointRadius = (ctx: any) => (updateIndices.has(ctx.dataIndex) ? 6 : 0)
 const pointStyle = (ctx: any) =>
@@ -42,66 +42,8 @@ const verticalLinePlugin = {
   },
 }
 
-interface SeriesSpec {
-  label: string
-  color: string
-  values: (number | null)[]
-}
-
-const pickValue = (key: keyof DailyStat): (number | null)[] =>
-  data.map((d) => {
-    const v = d[key] as number | undefined
-    return v == null ? null : v
-  })
-
-const comboSeries: SeriesSpec[] = [
-  {
-    label: 'OIDC + Provenance',
-    color: COLORS.oidcAndProvenance,
-    values: pickValue('oidcAndProvenance'),
-  },
-  {
-    label: 'OIDC without provenance',
-    color: COLORS.oidcWithoutProvenance,
-    values: pickValue('oidcWithoutProvenance'),
-  },
-  {
-    label: 'Provenance only',
-    color: COLORS.provenanceOnly,
-    values: pickValue('provenanceOnly'),
-  },
-  {
-    label: 'None',
-    color: COLORS.none,
-    values: pickValue('none'),
-  },
-]
-
-const independentSeries: SeriesSpec[] = [
-  {
-    label: 'OIDC',
-    color: COLORS.oidc,
-    values: pickValue('oidc'),
-  },
-  {
-    label: 'Provenance',
-    color: COLORS.provenance,
-    values: pickValue('provenance'),
-  },
-  {
-    label: 'Staged',
-    color: COLORS.staged,
-    values: pickValue('staged'),
-  },
-  {
-    label: 'OIDC + Provenance + Staged',
-    color: COLORS.oidcProvenanceStaged,
-    values: pickValue('oidcProvenanceStaged'),
-  },
-]
-
 function renderChart(
-  series: SeriesSpec[],
+  series: MetricSeriesSpec[],
   title: string,
 ): { canvas: SvgCanvas; chart: Chart } {
   const canvas = createCanvas(1000, 520, SvgExportFlag.ConvertTextToPaths)
@@ -110,9 +52,9 @@ function renderChart(
     plugins: [verticalLinePlugin],
     data: {
       labels: data.map((d) => d.date),
-      datasets: series.map(({ label, color, values }) => ({
+      datasets: series.map(({ key, label, color }) => ({
         label,
-        data: values,
+        data: getNullableMetricSeries(data, key),
         borderColor: color,
         backgroundColor: color,
         tension: 0.2,
@@ -164,14 +106,14 @@ function renderChart(
 }
 
 const combo = renderChart(
-  comboSeries,
+  COMBO_SERIES,
   'npm Top Packages — Provenance Adoption Over Time',
 )
 await writeChartSvg(combo.canvas, 'chart-daily-combo.svg')
 combo.chart.destroy()
 
 const independent = renderChart(
-  independentSeries,
+  INDEPENDENT_SERIES,
   'npm Top Packages — Independent Publishing Metrics Over Time',
 )
 await writeChartSvg(independent.canvas, 'chart-daily-independent.svg')

@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "lib": ["es2023"],
+    "lib": ["es2023", "DOM", "DOM.Iterable"],
     "moduleDetection": "force",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "allowImportingTsExtensions": true,
     "strict": true,
     "noUnusedLocals": true,

@@ -5,7 +5,7 @@ import { createSpinner } from 'nanospinner'
 import { npmHighImpact } from 'npm-high-impact'
 import pLimit from 'p-limit'
 import {
-  classifyResults,
+  createDailyStatEntry,
   type DailyStat,
   type Result,
   type Results,
@@ -47,23 +47,9 @@ fs.writeFileSync('results.json', `${JSON.stringify(results)}\n`)
 updateDailyStats(fullResults)
 
 function updateDailyStats(fullResults: Results): void {
-  const c = classifyResults(fullResults)
   const date = new Date().toISOString().slice(0, 10)
   const sha = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
-  const entry: DailyStat = {
-    date,
-    sha,
-    listSize: Object.keys(fullResults).length,
-    total: c.count,
-    oidcAndProvenance: c.oidcAndProvenance.length,
-    oidcWithoutProvenance: c.oidcWithoutProvenance.length,
-    provenanceOnly: c.provenanceOnly.length,
-    none: c.none.length,
-    oidc: c.oidc.length,
-    provenance: c.provenance.length,
-    staged: c.staged.length,
-    oidcProvenanceStaged: c.oidcProvenanceStaged.length,
-  }
+  const entry = createDailyStatEntry(fullResults, date, sha)
 
   const path = 'daily-stats.json'
   const existing: DailyStat[] = fs.existsSync(path)

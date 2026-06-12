@@ -4,19 +4,14 @@ import results from '../full-results.json' with { type: 'json' }
 import {
   classifyResults,
   COLORS,
+  COMBO_SERIES,
   registerInterFont,
   writeChartSvg,
   type Results,
 } from './shared.ts'
 
-const {
-  count,
-  provenanceOnly,
-  staged,
-  oidcAndProvenance,
-  oidcWithoutProvenance,
-  none,
-} = classifyResults(results as unknown as Results)
+const classified = classifyResults(results as unknown as Results)
+const { count, staged } = classified
 
 registerInterFont()
 
@@ -66,24 +61,13 @@ function makePattern(base: string, line: string, kind: PatternKind) {
 }
 
 // Provenance state (inner pie) — Tableau-style desaturated palette
-const provenanceLabels = [
-  'OIDC + Provenance',
-  'OIDC without provenance',
-  'Provenance only',
-  'None',
-]
-const provenanceBase = [
-  COLORS.oidcAndProvenance,
-  COLORS.oidcWithoutProvenance,
-  COLORS.provenanceOnly,
-  COLORS.none,
-]
-const provenanceFills = [
-  makePattern(COLORS.oidcAndProvenance, '#2f5e2a', 'dots'),
-  makePattern(COLORS.oidcWithoutProvenance, '#8a6f1e', 'cross'),
-  makePattern(COLORS.provenanceOnly, '#a05c14', 'forward'),
-  makePattern(COLORS.none, '#8a3133', 'backward'),
-]
+const provenanceLabels = COMBO_SERIES.map(({ label }) => label)
+const provenanceBase = COMBO_SERIES.map(({ color }) => color)
+const patternLines = ['#2f5e2a', '#8a6f1e', '#a05c14', '#8a3133']
+const patternKinds: PatternKind[] = ['dots', 'cross', 'forward', 'backward']
+const provenanceFills = COMBO_SERIES.map(({ color }, index) =>
+  makePattern(color, patternLines[index], patternKinds[index]),
+)
 
 // Staged publishing (outer ring)
 const stagedLabels = ['Staged', 'Non-staged']
@@ -104,12 +88,7 @@ const chart = new Chart(canvas as any, {
       // Inner solid pie: provenance state
       {
         label: 'Provenance state',
-        data: [
-          oidcAndProvenance.length,
-          oidcWithoutProvenance.length,
-          provenanceOnly.length,
-          none.length,
-        ],
+        data: COMBO_SERIES.map(({ key }) => classified[key].length),
         backgroundColor: provenanceFills as any,
         weight: 6,
       },
