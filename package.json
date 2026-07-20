@@ -2,7 +2,7 @@
   "name": "npm-top-publishing",
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@11.5.2",
+  "packageManager": "pnpm@11.15.1",
   "description": "Track OIDC, provenance, and staged publishing adoption across high-impact npm packages.",
   "author": "Kevin Deng <sxzz@sxzz.moe>",
   "license": "MIT",
@@ -26,24 +26,24 @@
     "format": "prettier --cache --write ."
   },
   "dependencies": {
-    "@napi-rs/canvas": "^1.0.0",
+    "@napi-rs/canvas": "^1.0.2",
     "chart.js": "^4.5.1",
     "ky": "^2.0.2",
     "nanospinner": "^1.2.2",
     "npm-high-impact": "^1.13.0",
     "p-limit": "^7.3.0",
-    "svgo": "^4.0.1",
-    "vue": "^3.5.38"
+    "svgo": "^4.0.2",
+    "vue": "^3.5.40"
   },
   "devDependencies": {
-    "@sxzz/eslint-config": "^8.1.0",
-    "@sxzz/prettier-config": "^2.3.1",
-    "@types/node": "^25.9.2",
-    "@typescript/native-preview": "7.0.0-dev.20260608.1",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "eslint": "^10.4.1",
-    "prettier": "^3.8.3",
-    "vite": "^8.0.16"
+    "@sxzz/eslint-config": "^8.2.1",
+    "@sxzz/prettier-config": "^2.3.2",
+    "@types/node": "^26.1.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5",
+    "vite": "^8.1.5"
   },
   "prettier": "@sxzz/prettier-config"
 }
