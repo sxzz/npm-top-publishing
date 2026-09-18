@@ -2,7 +2,13 @@
   "name": "npm-top-publishing",
   "type": "module",
   "private": true,
-  "packageManager": "pnpm@11.15.1",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.5.0",
+      "onFail": "download"
+    }
+  },
   "description": "Track OIDC, provenance, and staged publishing adoption across high-impact npm packages.",
   "author": "Kevin Deng <sxzz@sxzz.moe>",
   "license": "MIT",
