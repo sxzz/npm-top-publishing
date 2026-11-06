@@ -22,11 +22,14 @@ const PAGE_SIZE = 50
 // pause in typing instead of searching on every keystroke.
 const SEARCH_DELAY_MS = 150
 
+// Owned by the parent so the summary filters above the grid stay in sync.
+const requiredChecks = defineModel<CheckKey[]>('requiredChecks', {
+  required: true,
+})
+
 const query = ref('')
 const searchTerm = ref('')
 const limit = ref(PAGE_SIZE)
-// Ticked checks must all pass; unticked ones are not filtered on.
-const requiredChecks = ref<CheckKey[]>([])
 
 const fuse = computed(
   () =>
@@ -59,16 +62,12 @@ const searched = computed(() =>
 )
 
 const filtered = computed(() =>
-  searched.value.filter(
-    (row) =>
-      (!props.match || props.match(row)) &&
-      requiredChecks.value.every((key) => row[key]),
-  ),
+  props.match ? searched.value.filter(props.match) : searched.value,
 )
 
 const visible = computed(() => filtered.value.slice(0, limit.value))
 
-watch([searchTerm, requiredChecks, () => props.match], () => {
+watch([searchTerm, () => props.match], () => {
   limit.value = PAGE_SIZE
 })
 

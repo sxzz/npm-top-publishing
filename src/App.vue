@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import dailyStatsUrl from '../daily-stats.json?url'
 import fullResultsUrl from '../full-results.json?url'
 import { metric, STAGED_METHOD_CHANGED } from '../shared/model.ts'
@@ -27,9 +27,6 @@ import {
   formatPercent,
 } from './format.ts'
 
-type Focus =
-  { kind: 'state'; key: PackageState } | { kind: 'check'; key: CheckKey }
-
 const repositoryUrl = 'https://github.com/sxzz/npm-top-publishing'
 const upstreamUrl = 'https://github.com/wooorm/npm-high-impact'
 
@@ -42,7 +39,15 @@ const first = stats[0]!
 const total = latest.total
 const fullChain = countState(latest, 'full')
 
-const focus = ref<Focus | null>(null)
+// A state and the required checks are alternative filters: picking one clears
+// the other. The checks are shared with the table's checkboxes so both stay
+// in sync.
+const focusState = ref<PackageState | null>(null)
+const requiredChecks = ref<CheckKey[]>([])
+
+watch(requiredChecks, (keys) => {
+  if (keys.length > 0) focusState.value = null
+})
 const checker = ref<InstanceType<typeof PackageCheck>>()
 const trendView = ref<'checks' | 'states'>('checks')
 
@@ -83,29 +88,47 @@ const checkRows = CHECKS.map((check) => {
 })
 
 const match = computed<((row: PackageRow) => boolean) | null>(() => {
-  const current = focus.value
-  if (!current) return null
-  if (current.kind === 'state') return (row) => row.state === current.key
-  return (row) => row[current.key]
+  const state = focusState.value
+  if (state) return (row) => row.state === state
+  const keys = requiredChecks.value
+  if (keys.length > 0) return (row) => keys.every((key) => row[key])
+  return null
 })
 
 const focusLabel = computed(() => {
-  const current = focus.value
-  if (!current) return null
-  if (current.kind === 'state') return STATE_BY_KEY[current.key].label
-  return `${CHECKS.find((check) => check.key === current.key)!.label} used`
+  if (focusState.value) return STATE_BY_KEY[focusState.value].label
+  if (requiredChecks.value.length === 0) return null
+  return `${CHECKS.filter((check) => requiredChecks.value.includes(check.key))
+    .map((check) => check.label)
+    .join(' + ')} used`
 })
 
 const gridLabel = `Grid of ${formatNumber(rows.length)} npm packages in rank order, colored by publishing state. ${stateRows
   .map((row) => `${row.label}: ${formatNumber(row.count)}`)
   .join(', ')}. The package table below lists the same data.`
 
-function isFocused(kind: Focus['kind'], key: string): boolean {
-  return focus.value?.kind === kind && focus.value.key === key
+function toggleState(key: PackageState): void {
+  if (focusState.value === key) {
+    focusState.value = null
+    return
+  }
+  focusState.value = key
+  requiredChecks.value = []
 }
 
-function toggleFocus(next: Focus): void {
-  focus.value = isFocused(next.kind, next.key) ? null : next
+// Same behavior as ticking the checkbox in the table.
+function toggleCheck(key: CheckKey): void {
+  const keys = requiredChecks.value
+  requiredChecks.value = keys.includes(key)
+    ? keys.filter((k) => k !== key)
+    : CHECKS.map((check) => check.key).filter(
+        (k) => k === key || keys.includes(k),
+      )
+}
+
+function clearFocus(): void {
+  focusState.value = null
+  requiredChecks.value = []
 }
 </script>
 
@@ -147,8 +170,8 @@ function toggleFocus(next: Focus): void {
               <button
                 type="button"
                 class="legend-item"
-                :aria-pressed="isFocused('state', row.key)"
-                @click="toggleFocus({ kind: 'state', key: row.key })"
+                :aria-pressed="focusState === row.key"
+                @click="toggleState(row.key)"
               >
                 <span
                   class="legend-swatch"
@@ -173,8 +196,8 @@ function toggleFocus(next: Focus): void {
               <button
                 type="button"
                 class="legend-item"
-                :aria-pressed="isFocused('check', row.key)"
-                @click="toggleFocus({ kind: 'check', key: row.key })"
+                :aria-pressed="requiredChecks.includes(row.key)"
+                @click="toggleCheck(row.key)"
               >
                 <span class="legend-swatch is-outline" aria-hidden="true" />
                 <span class="legend-label">{{ row.label }}</span>
@@ -277,10 +300,11 @@ function toggleFocus(next: Focus): void {
         <h2 id="packages-title" class="section-title">Every package</h2>
       </div>
       <PackageList
+        v-model:required-checks="requiredChecks"
         :packages
         :match
         :focus-label="focusLabel"
-        @clear-focus="focus = null"
+        @clear-focus="clearFocus"
         @check="checker?.check($event)"
       />
     </section>
