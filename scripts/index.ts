@@ -13,12 +13,6 @@ import {
 
 const limit = pLimit(16)
 
-;(globalThis as any)[Symbol.for('undici.globalDispatcher.1')] = new (
-  globalThis as any
-)[Symbol.for('undici.globalDispatcher.1')].constructor({
-  allowH2: true,
-})
-
 console.log('total:', npmHighImpact.length)
 const spinner = createSpinner('Fetching...')
 spinner.start()
