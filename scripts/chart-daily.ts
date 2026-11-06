@@ -8,6 +8,8 @@ import {
   getNullableMetricSeries,
   INDEPENDENT_SERIES,
   registerInterFont,
+  STAGED_METRICS,
+  stagedMethodIndex,
   writeChartSvg,
   type DailyStat,
   type MetricSeriesSpec,
@@ -18,6 +20,7 @@ registerInterFont()
 const data = stats as DailyStat[]
 
 const updateIndices = getListUpdateIndices(data)
+const stagedIndex = stagedMethodIndex(data)
 
 const pointRadius = (ctx: any) => (updateIndices.has(ctx.dataIndex) ? 6 : 0)
 const pointStyle = (ctx: any) =>
@@ -37,6 +40,18 @@ const verticalLinePlugin = {
       ctx.moveTo(x, chartArea.top)
       ctx.lineTo(x, chartArea.bottom)
       ctx.stroke()
+    }
+    if (stagedIndex > 0) {
+      const x = scales.x.getPixelForValue(stagedIndex)
+      ctx.strokeStyle = COLORS.staged
+      ctx.fillStyle = COLORS.staged
+      ctx.beginPath()
+      ctx.moveTo(x, chartArea.top)
+      ctx.lineTo(x, chartArea.bottom)
+      ctx.stroke()
+      ctx.font = '12px Inter'
+      ctx.textAlign = 'right'
+      ctx.fillText('New staged detection', x - 6, chartArea.top + 14)
     }
     ctx.restore()
   },
@@ -64,6 +79,15 @@ function renderChart(
         pointBorderColor: COLORS.marker,
         borderWidth: 2,
         spanGaps: true,
+        // Staged numbers before the method change are overstated.
+        segment: STAGED_METRICS.has(key)
+          ? {
+              borderDash: (ctx: any) =>
+                stagedIndex !== -1 && ctx.p1DataIndex <= stagedIndex
+                  ? [6, 4]
+                  : undefined,
+            }
+          : undefined,
       })),
     },
     options: {

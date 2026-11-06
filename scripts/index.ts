@@ -6,6 +6,7 @@ import { npmHighImpact } from 'npm-high-impact'
 import pLimit from 'p-limit'
 import {
   createDailyStatEntry,
+  parseManifest,
   type DailyStat,
   type Result,
   type Results,
@@ -77,18 +78,5 @@ async function getMetadata(name: string): Promise<Result> {
       console.warn(`\nFailed to get metadata for ${name}: ${error}`)
       return null
     })
-  if (!response) return response
-
-  const version = response.version as string
-  const author =
-    typeof response.author === 'string'
-      ? response.author
-      : typeof response.author === 'object' && response.author
-        ? `${response.author.name}${response.author.email ? ` <${response.author.email}>` : ''}`
-        : null
-  const oidc = !!response._npmUser?.trustedPublisher
-  const provenance = !!response.dist?.attestations?.provenance
-  const staged =
-    Object.keys(response)[0] === '_id' || !!response._npmUser?.approver
-  return [version, author, provenance, oidc, staged]
+  return response ? parseManifest(response) : null
 }

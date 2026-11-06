@@ -89,7 +89,11 @@ export const CHECKS: { key: CheckKey; label: string; description: string }[] = [
   },
 ]
 
-function stateOf(oidc: boolean, provenance: boolean, staged: boolean) {
+export function stateOf(
+  oidc: boolean,
+  provenance: boolean,
+  staged: boolean,
+): PackageState {
   if (oidc && provenance) return staged ? 'full' : 'trusted'
   if (oidc) return 'oidc'
   if (provenance) return 'provenance'

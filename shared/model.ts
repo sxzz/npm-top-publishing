@@ -8,6 +8,40 @@ export type Result =
     ]
   | null
 
+// Until this snapshot, staged publishing was inferred from npmmirror's key
+// order, which also matched every version published after late July 2026 and
+// so overcounted staged releases. From this date on it is read from
+// `_npmUser.approver`. Older staged numbers are kept but drawn dashed.
+export const STAGED_METHOD_CHANGED = '2026-11-06'
+
+// Metrics whose history before `STAGED_METHOD_CHANGED` used the old method.
+export const STAGED_METRICS: ReadonlySet<MetricKey> = new Set([
+  'staged',
+  'oidcProvenanceStaged',
+])
+
+// Index of the first snapshot that uses the current staged method, or -1.
+export function stagedMethodIndex(stats: DailyStat[]): number {
+  return stats.findIndex((stat) => stat.date >= STAGED_METHOD_CHANGED)
+}
+
+// Parses a version manifest (`/<name>/latest`) from the registry.
+// Staged publishing is read from `_npmUser.approver`, which npm sets to the
+// maintainer who approved the staged release.
+export function parseManifest(manifest: any): NonNullable<Result> {
+  const version = manifest.version as string
+  const author =
+    typeof manifest.author === 'string'
+      ? manifest.author
+      : typeof manifest.author === 'object' && manifest.author
+        ? `${manifest.author.name}${manifest.author.email ? ` <${manifest.author.email}>` : ''}`
+        : null
+  const oidc = !!manifest._npmUser?.trustedPublisher
+  const provenance = !!manifest.dist?.attestations?.provenance
+  const staged = !!manifest._npmUser?.approver
+  return [version, author, provenance, oidc, staged]
+}
+
 export interface Results {
   [name: string]: Result
 }

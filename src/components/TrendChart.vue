@@ -4,11 +4,18 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   getListUpdateIndices,
   getNullableMetricSeries,
+  STAGED_METRICS,
+  stagedMethodIndex,
   type DailyStat,
 } from '../../shared/model.ts'
 import { countState, STATES, TREND_CHECKS, type PackageState } from '../data.ts'
 import { formatCompact, formatNumber, formatShortDate } from '../format.ts'
-import type { ChartDataset, Chart as ChartInstance, Plugin } from 'chart.js'
+import type {
+  ChartDataset,
+  Chart as ChartInstance,
+  Plugin,
+  ScriptableLineSegmentContext,
+} from 'chart.js'
 
 const props = defineProps<{
   stats: DailyStat[]
@@ -16,6 +23,7 @@ const props = defineProps<{
 }>()
 
 const INK = '#12141c'
+const ULTRA = '#3b4fe0'
 const MUTED = '#5b6273'
 const RULE = 'rgb(18 20 28 / 9%)'
 const FONT_MONO = '"Martian Mono", ui-monospace, monospace'
@@ -31,6 +39,16 @@ function stateSeries(key: PackageState): (number | null)[] {
   )
 }
 
+// States whose split depends on the staged check.
+const STAGED_STATES = new Set<PackageState>(['full', 'trusted'])
+
+// True for segments that end on or before the first snapshot using the
+// current staged method, so the jump into it is marked as well.
+function isOldStagedSegment(ctx: ScriptableLineSegmentContext): boolean {
+  const index = stagedMethodIndex(props.stats)
+  return index !== -1 && ctx.p1DataIndex <= index
+}
+
 function datasets(): ChartDataset<'line', (number | null)[]>[] {
   if (props.view === 'states') {
     return STATES.map((state) => ({
@@ -42,6 +60,13 @@ function datasets(): ChartDataset<'line', (number | null)[]>[] {
       fill: true,
       pointRadius: 0,
       stack: 'states',
+      // Areas cannot be dashed, so the old split is faded instead.
+      segment: STAGED_STATES.has(state.key)
+        ? {
+            backgroundColor: (ctx) =>
+              isOldStagedSegment(ctx) ? `${state.color}80` : undefined,
+          }
+        : undefined,
     }))
   }
   return TREND_CHECKS.map((series) => ({
@@ -53,14 +78,34 @@ function datasets(): ChartDataset<'line', (number | null)[]>[] {
     borderWidth: 2,
     pointRadius: 0,
     tension: 0.2,
+    segment: STAGED_METRICS.has(series.key)
+      ? {
+          borderDash: (ctx) => (isOldStagedSegment(ctx) ? [4, 4] : undefined),
+        }
+      : undefined,
   }))
 }
 
-function listUpdatePlugin(indices: Set<number>): Plugin<'line'> {
+function markerPlugin(indices: Set<number>): Plugin<'line'> {
   return {
-    id: 'listUpdates',
+    id: 'markers',
     afterDatasetsDraw({ ctx, chartArea, scales }) {
       ctx.save()
+      const stagedIndex = stagedMethodIndex(props.stats)
+      if (stagedIndex > 0) {
+        const x = scales.x.getPixelForValue(stagedIndex)
+        ctx.strokeStyle = ULTRA
+        ctx.fillStyle = ULTRA
+        ctx.setLineDash([4, 3])
+        ctx.lineWidth = 1
+        ctx.font = `500 10px ${FONT_MONO}`
+        ctx.textAlign = 'right'
+        ctx.beginPath()
+        ctx.moveTo(x, chartArea.top)
+        ctx.lineTo(x, chartArea.bottom)
+        ctx.stroke()
+        ctx.fillText('new staged check', x - 5, chartArea.top + 24)
+      }
       ctx.strokeStyle = INK
       ctx.fillStyle = INK
       ctx.setLineDash([2, 3])
@@ -97,7 +142,7 @@ function render(): void {
       labels: props.stats.map((stat) => formatShortDate(stat.date)),
       datasets: datasets(),
     },
-    plugins: [listUpdatePlugin(getListUpdateIndices(props.stats))],
+    plugins: [markerPlugin(getListUpdateIndices(props.stats))],
     options: {
       responsive: true,
       maintainAspectRatio: false,

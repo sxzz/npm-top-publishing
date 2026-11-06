@@ -758,3 +758,155 @@ main {
     scroll-behavior: auto !important;
   }
 }
+
+/* Package checker */
+
+.checker {
+  margin-top: clamp(64px, 9vw, 112px);
+}
+
+.checker-lede {
+  max-width: 60ch;
+  margin-top: 8px;
+  color: var(--slate);
+  font-size: 15px;
+}
+
+.checker-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.checker-submit {
+  padding: 10px 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--fog);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.checker-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.checker-output {
+  margin-top: 20px;
+}
+
+.checker-message {
+  padding: 14px 0;
+  border-top: 1px solid var(--ink);
+  color: var(--slate);
+  font-size: 14px;
+}
+
+.checker-message.is-error strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.checker-result {
+  border-top: 1px solid var(--ink);
+  padding-top: 16px;
+}
+
+.checker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 0;
+  font-family: var(--font-mono);
+}
+
+.checker-name {
+  font-size: 18px;
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.checker-name:hover {
+  text-decoration: underline;
+}
+
+.checker-state {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.checker-meta {
+  margin-top: 4px;
+  color: var(--slate);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.checker-checks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.checker-checks > div {
+  padding: 14px 24px 0 0;
+  opacity: 0.55;
+}
+
+.checker-checks > div + div {
+  padding-left: 24px;
+  border-left: 1px solid var(--rule);
+}
+
+.checker-checks > div.on {
+  opacity: 1;
+}
+
+.checker-checks dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.checker-checks dt::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+}
+
+.checker-checks .on dt::before {
+  background: currentColor;
+}
+
+.checker-verdict {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.checker-checks dd {
+  margin-top: 6px;
+  max-width: 34ch;
+  color: var(--slate);
+  font-size: 14px;
+}
+
+@media (max-width: 880px) {
+  .checker-checks {
+    grid-template-columns: 1fr;
+  }
+
+  .checker-checks > div,
+  .checker-checks > div + div {
+    padding: 12px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+}

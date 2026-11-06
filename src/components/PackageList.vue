@@ -15,7 +15,7 @@ const props = defineProps<{
   focusLabel: string | null
 }>()
 
-const emit = defineEmits<{ clearFocus: [] }>()
+const emit = defineEmits<{ clearFocus: []; check: [name: string] }>()
 
 const PAGE_SIZE = 50
 // A fuzzy search over ~17k rows takes tens of milliseconds, so wait for a
@@ -157,6 +157,17 @@ function packageUrl(name: string): string {
     <p v-else class="list-empty">
       No package matches the search and filters. Clear the search or untick a
       check.
+      <template v-if="searchTerm">
+        Not tracked?
+        <button
+          type="button"
+          class="text-button"
+          translate="no"
+          @click="emit('check', searchTerm)"
+        >
+          Check {{ searchTerm }} on the registry
+        </button>
+      </template>
     </p>
 
     <button

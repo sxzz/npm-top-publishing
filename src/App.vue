@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import dailyStatsUrl from '../daily-stats.json?url'
 import fullResultsUrl from '../full-results.json?url'
-import { metric } from '../shared/model.ts'
+import { metric, STAGED_METHOD_CHANGED } from '../shared/model.ts'
+import PackageCheck from './components/PackageCheck.vue'
 import PackageGrid from './components/PackageGrid.vue'
 import PackageList from './components/PackageList.vue'
 import TrendChart from './components/TrendChart.vue'
@@ -42,7 +43,21 @@ const total = latest.total
 const fullChain = countState(latest, 'full')
 
 const focus = ref<Focus | null>(null)
+const checker = ref<InstanceType<typeof PackageCheck>>()
 const trendView = ref<'checks' | 'states'>('checks')
+
+// The two snapshots straddle the staged method change, so any count that
+// depends on the staged check is not comparable between them.
+const stagedNotComparable =
+  previous.date < STAGED_METHOD_CHANGED && latest.date >= STAGED_METHOD_CHANGED
+const deltaTitle = `Change since ${formatDate(previous.date)}`
+const stagedDeltaTitle = `Not comparable: staged detection changed on ${formatDate(STAGED_METHOD_CHANGED)}`
+
+function deltaCell(change: number, dependsOnStaged: boolean) {
+  return dependsOnStaged && stagedNotComparable
+    ? { delta: '—', deltaTitle: stagedDeltaTitle }
+    : { delta: formatDelta(change), deltaTitle }
+}
 
 const stateRows = STATES.map((state) => {
   const count = countState(latest, state.key)
@@ -50,7 +65,10 @@ const stateRows = STATES.map((state) => {
     ...state,
     count,
     percent: formatPercent(count, total),
-    delta: formatDelta(count - countState(previous, state.key)),
+    ...deltaCell(
+      count - countState(previous, state.key),
+      state.key === 'full' || state.key === 'trusted',
+    ),
   }
 })
 
@@ -60,7 +78,7 @@ const checkRows = CHECKS.map((check) => {
     ...check,
     count,
     percent: formatPercent(count, total),
-    delta: formatDelta(count - metric(previous, check.key)),
+    ...deltaCell(count - metric(previous, check.key), check.key === 'staged'),
   }
 })
 
@@ -140,11 +158,9 @@ function toggleFocus(next: Focus): void {
                 <span class="legend-label">{{ row.label }}</span>
                 <span class="legend-count">{{ formatNumber(row.count) }}</span>
                 <span class="legend-percent">{{ row.percent }}</span>
-                <span
-                  class="legend-delta"
-                  :title="`Change since ${formatDate(previous.date)}`"
-                  >{{ row.delta }}</span
-                >
+                <span class="legend-delta" :title="row.deltaTitle">{{
+                  row.delta
+                }}</span>
               </button>
             </li>
           </ul>
@@ -164,11 +180,9 @@ function toggleFocus(next: Focus): void {
                 <span class="legend-label">{{ row.label }}</span>
                 <span class="legend-count">{{ formatNumber(row.count) }}</span>
                 <span class="legend-percent">{{ row.percent }}</span>
-                <span
-                  class="legend-delta"
-                  :title="`Change since ${formatDate(previous.date)}`"
-                  >{{ row.delta }}</span
-                >
+                <span class="legend-delta" :title="row.deltaTitle">{{
+                  row.delta
+                }}</span>
               </button>
             </li>
           </ul>
@@ -196,6 +210,8 @@ function toggleFocus(next: Focus): void {
         </div>
       </dl>
     </section>
+
+    <PackageCheck ref="checker" />
 
     <section class="trend" aria-labelledby="trend-title">
       <div class="section-head">
@@ -246,6 +262,14 @@ function toggleFocus(next: Focus): void {
         {{ formatDate(first.date) }}; provenance, staged and the full breakdown
         by state are recorded from late May 2026.
       </p>
+      <p class="chart-note">
+        The blue dashed line marks {{ formatDate(STAGED_METHOD_CHANGED) }}, when
+        staged detection switched to the approver npm records on each staged
+        release. The earlier method guessed from how the registry mirror ordered
+        a manifest's fields, and from late July 2026 that guess also matched
+        ordinary releases, so staged and full chain counts before the line are
+        overstated. They are drawn dashed, or faded in the state view.
+      </p>
     </section>
 
     <section id="packages" class="packages" aria-labelledby="packages-title">
@@ -257,6 +281,7 @@ function toggleFocus(next: Focus): void {
         :match
         :focus-label="focusLabel"
         @clear-focus="focus = null"
+        @check="checker?.check($event)"
       />
     </section>
   </main>
