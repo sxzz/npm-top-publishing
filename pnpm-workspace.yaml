@@ -1,5 +1,7 @@
 minimumReleaseAge: 0
-shellEmulator: true
+minimumReleaseAgeExcludePrune: true
 trustLockfile: true
 trustPolicy: no-downgrade
-trustPolicyIgnoreAfter: 604800 # 7 days
+trustPolicyIgnoreAfter: 10080 # 7 days
+trustPolicyExcludePrune: true
+shellEmulator: true

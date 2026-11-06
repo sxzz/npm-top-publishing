@@ -2,13 +2,6 @@
   "name": "npm-top-publishing",
   "type": "module",
   "private": true,
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "12.5.0",
-      "onFail": "download"
-    }
-  },
   "description": "Track OIDC, provenance, and staged publishing adoption across high-impact npm packages.",
   "author": "Kevin Deng <sxzz@sxzz.moe>",
   "license": "MIT",
@@ -21,6 +14,13 @@
   "bugs": {
     "url": "https://github.com/sxzz/npm-top-publishing/issues"
   },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.18.0",
+      "onFail": "download"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -28,28 +28,29 @@
     "refresh": "node scripts/index.ts && node scripts/update-readme.ts && node scripts/chart-pie.ts && node scripts/chart-daily.ts && pnpm run format && svgo chart-pie.svg chart-daily-combo.svg chart-daily-independent.svg",
     "lint": "eslint --cache .",
     "lint:fix": "pnpm run lint --fix",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --cache --write ."
   },
   "dependencies": {
-    "@napi-rs/canvas": "^1.0.2",
-    "chart.js": "^4.5.1",
-    "ky": "^2.0.2",
+    "@napi-rs/canvas": "^1.1.0",
+    "chart.js": "^4.6.1",
+    "ky": "^2.2.0",
     "nanospinner": "^1.2.2",
     "npm-high-impact": "^1.13.0",
-    "p-limit": "^7.3.0",
-    "svgo": "^4.0.2",
-    "vue": "^3.5.40"
+    "p-limit": "^7.3.3",
+    "svgo": "^4.1.0",
+    "vue": "^3.5.45"
   },
   "devDependencies": {
-    "@sxzz/eslint-config": "^8.2.1",
-    "@sxzz/prettier-config": "^2.3.2",
-    "@types/node": "^26.1.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "eslint": "^10.7.0",
-    "prettier": "^3.9.5",
-    "vite": "^8.1.5"
+    "@sxzz/eslint-config": "^8.9.2",
+    "@sxzz/prettier-config": "^2.3.3",
+    "@types/node": "^26.6.6",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "eslint": "^10.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-next": "npm:typescript@^7.0.2",
+    "vite": "^8.3.6"
   },
   "prettier": "@sxzz/prettier-config"
 }
