@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import Fuse from 'fuse.js'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   CHECKS,
   STATE_BY_KEY,
@@ -17,25 +18,57 @@ const props = defineProps<{
 const emit = defineEmits<{ clearFocus: [] }>()
 
 const PAGE_SIZE = 50
+// A fuzzy search over ~17k rows takes tens of milliseconds, so wait for a
+// pause in typing instead of searching on every keystroke.
+const SEARCH_DELAY_MS = 150
 
 const query = ref('')
+const searchTerm = ref('')
 const limit = ref(PAGE_SIZE)
 // Ticked checks must all pass; unticked ones are not filtered on.
 const requiredChecks = ref<CheckKey[]>([])
 
-const filtered = computed(() => {
-  const needle = query.value.trim().toLowerCase()
-  return props.packages.filter(
+const fuse = computed(
+  () =>
+    new Fuse(props.packages, {
+      keys: [
+        { name: 'name', weight: 2 },
+        { name: 'author', weight: 1 },
+      ],
+      threshold: 0.3,
+      // Scoped names put the interesting part far from the start.
+      ignoreLocation: true,
+    }),
+)
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(query, (value) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTerm.value = value.trim()
+  }, SEARCH_DELAY_MS)
+})
+onBeforeUnmount(() => clearTimeout(searchTimer))
+
+// Search results come back best match first; without a search the list stays
+// in rank order.
+const searched = computed(() =>
+  searchTerm.value
+    ? fuse.value.search(searchTerm.value).map((result) => result.item)
+    : props.packages,
+)
+
+const filtered = computed(() =>
+  searched.value.filter(
     (row) =>
       (!props.match || props.match(row)) &&
-      requiredChecks.value.every((key) => row[key]) &&
-      (!needle || row.name.toLowerCase().includes(needle)),
-  )
-})
+      requiredChecks.value.every((key) => row[key]),
+  ),
+)
 
 const visible = computed(() => filtered.value.slice(0, limit.value))
 
-watch([query, requiredChecks, () => props.match], () => {
+watch([searchTerm, requiredChecks, () => props.match], () => {
   limit.value = PAGE_SIZE
 })
 
@@ -48,11 +81,11 @@ function packageUrl(name: string): string {
   <div class="package-list">
     <div class="list-controls">
       <label class="search">
-        <span class="visually-hidden">Search packages by name</span>
+        <span class="visually-hidden">Search packages by name or author</span>
         <input
           v-model="query"
           type="search"
-          placeholder="Search by package name"
+          placeholder="Search by package or author"
           autocomplete="off"
           spellcheck="false"
         />
@@ -81,7 +114,7 @@ function packageUrl(name: string): string {
         <tr>
           <th scope="col" class="col-rank">Rank</th>
           <th scope="col">Package</th>
-          <th scope="col" class="col-author">Publisher</th>
+          <th scope="col" class="col-author">Author</th>
           <th scope="col" class="col-checks">Checks</th>
         </tr>
       </thead>
