@@ -49,6 +49,7 @@ function context(): CanvasRenderingContext2D | undefined {
   const el = canvas.value
   if (!el) return
   const { width, height } = layout.value
+  // eslint-disable-next-line baseline-js/use-baseline -- supported in every browser; Baseline data lists it as limited
   const dpr = window.devicePixelRatio || 1
   if (el.width !== width * dpr || el.height !== height * dpr) {
     el.width = width * dpr
@@ -126,6 +127,7 @@ function onPointerMove(event: PointerEvent): void {
 function onClick(): void {
   const row = hoveredRow.value
   if (!row) return
+  // eslint-disable-next-line baseline-js/use-baseline -- supported in every browser; Baseline data lists it as limited
   window.open(
     `https://npmx.dev/package/${encodeURIComponent(row.name)}`,
     '_blank',
